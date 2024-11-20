@@ -1,0 +1,8 @@
+github.com/collinglass/bptree v0.0.0-20150421005947-9bfc0de8049e h1:7yPXwlPutGq9GRybCfXBuX/zI6EKXtgCW8I5XDOvJl0=
+github.com/collinglass/bptree v0.0.0-20150421005947-9bfc0de8049e/go.mod h1:GAugteqd9JOsaHsyD0tgA34S76LP53jNcn8jBg2pYXY=
+github.com/edsrzf/mmap-go v1.0.0 h1:CEBF7HpRnUCSJgGUb5h1Gm7e3VkmVDrR8lvWVLtrOFw=
+github.com/edsrzf/mmap-go v1.0.0/go.mod h1:YO35OhQPt3KJa3ryjFM5Bs14WD66h8eGKpfaBNrHW5M=
+github.com/spy16/kiwi v0.0.0-20231119051452-932458bb4371 h1:PBRcZDwNwzQwkkI/OuE19d8dxBIUv/+aX9ZUiVPSQ4I=
+github.com/spy16/kiwi v0.0.0-20231119051452-932458bb4371/go.mod h1:JAJoESrcbi6tyalZDs3d0HXm66QEqi2JxDL4cLMSkeg=
+golang.org/x/sys v0.0.0-20200302150141-5c8b2ff67527 h1:uYVVQ9WP/Ds2ROhcaGPeIdVq0RIXVLwsHlnvJ+cT1So=
+golang.org/x/sys v0.0.0-20200302150141-5c8b2ff67527/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
