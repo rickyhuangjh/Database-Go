@@ -1,31 +1,38 @@
 package node
 
+
+type V struct {
+	Block int32
+	Offset int32
+}
+
 type BTreeNode interface {
-	get(key int32) ([]byte, bool)
-	getRange(start, end int32, res [][]byte) [][]byte
-	traverse(res [][]byte) [][]byte
-	set(key int32, val []byte) (bool, error)
-	delete(key int32) (bool, error)
-	getParent() *InternalNode
-	setParent(parent *InternalNode) error
+	Get(key uint64) (V, bool)
+	GetRange(start, end uint64, res []V) []V
+	Traverse(res []V) []V
+	Set(key uint64, val V) (bool, error)
+	Delete(key uint64) (bool, error)
+	GetParent() *InternalNode
+	SetParent(parent *InternalNode) error
+	GetNewRoot() BTreeNode
+	Print(level int)
+	Verify() (uint64, uint64)
 	split() error
-	getNewRoot() BTreeNode
-	print(level int)
-	verify() (int32, int32)
+	merge() error
 }
 
 type InternalNode struct {
-	Order    uint32
+	Order    uint64
 	Parent   *InternalNode
-	Keys     []int32
+	Keys     []uint64
 	Children []BTreeNode
 }
 
 type LeafNode struct {
-	Order  uint32
+	Order  uint64
 	Parent *InternalNode
 	Next   *LeafNode
 	Prev   *LeafNode
-	Keys   []int32
-	Vals   [][]byte
+	Keys   []uint64
+	Vals   []V
 }

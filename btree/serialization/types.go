@@ -1,38 +1,43 @@
 package serialization
 
+
 type InternalNodeSerialized struct {
-	Order       int32 // negative
-	ParentID    uint32
+	ParentID    uint64 // MSB is 1
 	NumKeys     uint32
 	NumChildren uint32
-	Keys        []int32
-	Children    []uint32
+	Keys        []uint64
+	ChildrenIDs    []uint64
 }
 
 type LeafNodeSerialized struct {
-	Order    int32 // positive
-	ParentID uint32
-	PrevID   uint32
-	NextID   uint32
+	ParentID uint64 // MSB is 0
+	PrevID   uint64
+	NextID   uint64
 	NumKeys  uint32
 	NumVals  uint32
-	Keys     []int32
-	Vals     [][]byte // max size = 4096 - header size
+	Keys     []uint64
+	Vals     []uint64 // max size = 4096 - header size
 }
 
-const PageSize = 4096
+const pageSize = 4096
 
-const OrderSize = 32
-const ParentIDSize = 32
 
-const PrevIDSize = 32
-const NextIDSize = 32
+const parentIDSize = 64
+const prevIDSize = 64
+const nextIDSize = 64
+const childIDSize = 64
 
-const NumKeySize = 32
-const NumChildrenSize = 32
-const NumValSize = 32
+const numKeySize = 32
+const numChildrenSize = 32
+const numValSize = 32
 
-const KeySize = 32
+const keySize = 64
+const valSize = 64
 
-const InternalHeaderSize = OrderSize + ParentIDSize + NumKeySize + NumChildrenSize
-const LeafHeaderSize = OrderSize + ParentIDSize + PrevIDSize + NextIDSize + NumKeySize + NumValSize
+const internalHeaderSize = parentIDSize + numKeySize + numChildrenSize
+
+const leafHeaderSize = parentIDSize + prevIDSize + nextIDSize + numKeySize + numValSize
+
+
+
+
