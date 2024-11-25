@@ -22,11 +22,9 @@ type btree struct {
 	Size  int
 }
 
-const optimalOrder = 61
 
 func NewBTree() BTree {
 	return &btree{
-		Order: optimalOrder,
 		Root:  nil,
 		Size:  0,
 	}
@@ -46,7 +44,7 @@ func (b *btree) Traverse() []node.V {
 
 func (b *btree) Set(key uint64, val node.V) error {
 	if b.Root == nil {
-		b.Root = node.NewLeafNode(b.Order)
+		b.Root = node.NewLeafNode()
 	}
 
 	wasAdded, err := b.Root.Set(key, val)

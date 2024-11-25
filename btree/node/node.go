@@ -1,9 +1,8 @@
 package node
 
-
 type V struct {
-	Block int32
-	Offset int32
+	Block uint32
+	Offset uint32
 }
 
 type BTreeNode interface {
@@ -36,3 +35,5 @@ type LeafNode struct {
 	Keys   []uint64
 	Vals   []V
 }
+
+

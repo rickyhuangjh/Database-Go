@@ -7,11 +7,11 @@ import (
 )
 
 
-func NewLeafNode(order uint64) *LeafNode {
+func NewLeafNode() *LeafNode {
 	return &LeafNode{
-		Order:    order,
-		Keys:     make([]uint64, 0, order),
-		Vals:     make([]V, 0, order),
+		Order:    utils.OptimalLeafOrder,
+		Keys:     make([]uint64, 0, utils.OptimalLeafOrder),
+		Vals:     make([]V, 0, utils.OptimalLeafOrder),
 		Parent:   nil,
 		Next:     nil,
 		Prev:     nil,
@@ -103,17 +103,7 @@ func (n *LeafNode) GetNewRoot() BTreeNode {
 
 func (n *LeafNode) Print(level int) {
     indent := strings.Repeat("    ", level)
-	next := n.Next
-	prev := n.Prev
-	nextKeys := []uint64{}
-	if next != nil {
-		nextKeys = next.Keys
-	}
-	prevKeys := []uint64{}
-	if prev != nil {
-		prevKeys = prev.Keys
-	}
-    fmt.Printf("%sLeaf Node: keys=%v, next=%v, prev=%v\n", indent, n.Keys, nextKeys, prevKeys)
+    fmt.Printf("%sLeaf Node: keys=%v", indent, n.Keys)
 }
 
 func (n *LeafNode) Verify() (uint64, uint64) {
@@ -125,9 +115,9 @@ func (n *LeafNode) split() error {
 		return nil
 	}
 
-	siblingNode := NewLeafNode(n.Order)
+	siblingNode := NewLeafNode()
 	if n.Parent == nil {
-		n.Parent = newInternalNode(n.Order)
+		n.Parent = NewInternalNode()
 		n.Parent.insertChild(0, n)
 	}
 	siblingNode.Parent = n.Parent

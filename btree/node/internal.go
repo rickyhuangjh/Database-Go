@@ -6,11 +6,11 @@ import (
 	"strings"
 )
 
-func newInternalNode(order uint64) *InternalNode {
+func NewInternalNode() *InternalNode {
 	return &InternalNode{
-		Order:    order,
-		Keys:     make([]uint64, 0, order),
-		Children: make([]BTreeNode, 0, order + 1),
+		Order:    utils.OptimalInternalOrder,
+		Keys:     make([]uint64, 0, utils.OptimalInternalOrder),
+		Children: make([]BTreeNode, 0, utils.OptimalInternalOrder + 1),
 		Parent:   nil,
 	}
 }
@@ -93,9 +93,9 @@ func (n *InternalNode) split() error {
 		return nil
 	}
 
-	siblingNode := newInternalNode(n.Order)
+	siblingNode := NewInternalNode()
 	if n.Parent == nil {
-		n.Parent = newInternalNode(n.Order)
+		n.Parent = NewInternalNode()
 		n.Parent.insertChild(0, n)
 	}
 	siblingNode.Parent = n.Parent

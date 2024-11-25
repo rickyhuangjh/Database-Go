@@ -1,5 +1,10 @@
 package serialization
 
+import "btree/node"
+
+type BTreeNodeSerialize interface {
+	Deserialize() node.BTreeNode
+}
 
 type InternalNodeSerialized struct {
 	ParentID    uint64 // MSB is 1
@@ -18,26 +23,3 @@ type LeafNodeSerialized struct {
 	Keys     []uint64
 	Vals     []uint64 // max size = 4096 - header size
 }
-
-const pageSize = 4096
-
-
-const parentIDSize = 64
-const prevIDSize = 64
-const nextIDSize = 64
-const childIDSize = 64
-
-const numKeySize = 32
-const numChildrenSize = 32
-const numValSize = 32
-
-const keySize = 64
-const valSize = 64
-
-const internalHeaderSize = parentIDSize + numKeySize + numChildrenSize
-
-const leafHeaderSize = parentIDSize + prevIDSize + nextIDSize + numKeySize + numValSize
-
-
-
-
