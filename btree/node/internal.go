@@ -9,20 +9,39 @@ import (
 func NewInternalNode() *InternalNode {
 	return &InternalNode{
 		ParentID:   0,
-		Keys:     make([]uint64, 0, utils.InternalOrder),
-		ChildIDs: make([]uint64, 0, utils.InternalOrder + 1),
+		Keys:     make([]uint64, 0, internalOrder),
+		ChildIDs: make([]uint64, 0, internalOrder + 1),
 	}
 }
 
+func (n *InternalNode) GetID() uint64 {
+	return n.ID
+}
 
+func (n *InternalNode) SetID(id uint64) {
+	n.ID = id
+}
+
+func (n *InternalNode) GetParentID() uint64 {
+	return n.ParentID
+}
+
+func (n *InternalNode) SetParentID(id uint64) {
+	n.ParentID = id
+}
 
 func (n *InternalNode) find(key uint64) (int, bool) {
-	for i, curKey := range n.Keys {
-		if key < curKey {
-			return i, true
+	res := len(n.Keys)
+	for left, right := 0, len(n.Keys) - 1; left <= right; {
+		mid := (left + right) / 2
+		if n.Keys[mid] <= key {
+			res = mid
+			left = mid + 1
+		} else {
+			right = mid - 1;
 		}
 	}
-	return len(n.Keys), false
+	return res, false
 }
 
 func (n *InternalNode) findChildIdx(childID uint64) (int, bool) {
@@ -48,6 +67,7 @@ func (n *InternalNode) GetRange(c NodeCache,
 func (n *InternalNode) Traverse(c NodeCache, res []uint64) []uint64 {
 	return c.Get(n.ChildIDs[0]).Traverse(c, res)
 }
+
 
 func (n *InternalNode) Set(c NodeCache, key uint64, val uint64) (bool, error) {
 	idx, _ := n.find(key)
@@ -81,148 +101,127 @@ func (n *InternalNode) replaceKey(c NodeCache, oldKey uint64, newKey uint64) {
 }
 
 func (n *InternalNode) split(c NodeCache) error {
-	if len(n.ChildIDs) <= utils.InternalOrder {
+	if len(n.ChildIDs) <= internalOrder {
 		return nil
 	}
 
+	sibling := NewInternalNode()
+	c.Register(sibling)
 
-	parentNode := c.Get(n.ParentID)
-	
-
-	siblingNode := NewInternalNode()
-	c.Register(siblingNode)
+	var parent *InternalNode
 	if n.ParentID == 0 {
-		parentNode := newInternalNode()
-		c.Register(parentNode)
-		parentNode.ChildIDs = insert(parentNode.ChildIDs, 0, n.ID)
+		parent = NewInternalNode()
+		err := c.Register(parent)
+		if err != nil {
+			return err
+		}
+		n.ParentID = parent.ID
+		parent.ChildIDs = utils.Insert(parent.ChildIDs, 0, n.ID)
+	} else {
+		parent = c.Get(n.ParentID).(*InternalNode)
 	}
-	siblingNode.Parent = n.Parent
+	sibling.ParentID= n.ParentID
 
 	mid := len(n.Keys) / 2
 
-	idx, _ := n.Parent.find(n.Keys[mid])
-	n.Parent.Keys = utils.Insert(n.Parent.Keys, idx, n.Keys[mid])
-	n.Parent.insertChild(idx+1, siblingNode)
+	idx, _ := parent.find(n.Keys[mid])
+	parent.Keys = utils.Insert(parent.Keys, idx, n.Keys[mid])
+	parent.ChildIDs = utils.Insert(parent.ChildIDs, idx+1, sibling.ID)
 
-	siblingNode.Keys = make([]uint64, len(n.Keys[mid+1:]), n.Order+1)
-	copy(siblingNode.Keys, n.Keys[mid+1:])
+	sibling.Keys = make([]uint64, len(n.Keys[mid+1:]), internalOrder)
+	copy(sibling.Keys, n.Keys[mid+1:])
 	n.Keys = n.Keys[:mid]
 
-	siblingNode.Children = make([]BTreeNode, len(n.Children[mid+1:]), n.Order+1)
-	copy(siblingNode.Children, n.Children[mid+1:])
-	n.Children = n.Children[:mid+1]
+	sibling.ChildIDs = make([]uint64, len(n.ChildIDs[mid+1:]), internalOrder+1)
+	copy(sibling.ChildIDs, n.ChildIDs[mid+1:])
+	n.ChildIDs = n.ChildIDs[:mid+1]
 
-	for _, child := range siblingNode.Children {
-		child.SetParent(siblingNode)
+	for _, childID := range sibling.ChildIDs {
+		c.Get(childID).SetParentID(sibling.ID)
 	}
 
-	return n.Parent.split()
+	return parent.split(c)
 }
 
-func (n *InternalNode) merge(c nodeCache) error {
-	if n.Parent == nil || len(n.Children) >= int(n.Order + 1)/2 {
+func (n *InternalNode) merge(c NodeCache) error {
+
+	parent := c.Get(n.ParentID).(*InternalNode)
+	if parent == nil || len(n.ChildIDs) >= (internalOrder + 1)/2 {
 		return nil
 	}
 
-	ourIdx := 0
-	for i, child := range n.Parent.Children {
-		if child == n {
-			ourIdx = i
-			break
-		}
-	}
+	ourIdx, _ := parent.findChildIdx(n.ID)
 
 	// Try to steal from siblings first
 	if ourIdx > 0 &&
-		len(n.Parent.Children[ourIdx-1].(*InternalNode).Children) > int(n.Order + 1)/2 {
+		len(c.Get(parent.ChildIDs[ourIdx-1]).(*InternalNode).ChildIDs) >
+		(internalOrder + 1)/2 {
 		// Steal from left sibling
-		leftSibling := n.Parent.Children[ourIdx-1].(*InternalNode)
-		n.Keys = utils.Insert(n.Keys, 0, n.Parent.Keys[ourIdx-1])
-		n.Parent.Keys[ourIdx-1] = leftSibling.Keys[len(leftSibling.Keys)-1]
+		leftSibling := c.Get(parent.ChildIDs[ourIdx-1]).(*InternalNode)
+		n.Keys = utils.Insert(n.Keys, 0, parent.Keys[ourIdx-1])
+		parent.Keys[ourIdx-1] = leftSibling.Keys[len(leftSibling.Keys)-1]
 		leftSibling.Keys = leftSibling.Keys[:len(leftSibling.Keys)-1]
-		n.Children = utils.Insert(n.Children, 0, leftSibling.Children[len(leftSibling.Children)-1])
-		leftSibling.Children = leftSibling.Children[:len(leftSibling.Children)-1]
-		n.Children[0].SetParent(n)
+		n.ChildIDs = utils.Insert(n.ChildIDs, 0,
+			leftSibling.ChildIDs[len(leftSibling.ChildIDs)-1])
+		leftSibling.ChildIDs = leftSibling.ChildIDs[:len(leftSibling.ChildIDs)-1]
+		c.Get(n.ChildIDs[0]).SetParentID(n.ID)
 
 		return nil
-	} else if ourIdx < len(n.Parent.Children)-1 &&
-		len(n.Parent.Children[ourIdx+1].(*InternalNode).Children) > int(n.Order + 1)/2 {
+	} else if ourIdx < len(parent.ChildIDs)-1 &&
+		len(c.Get(parent.ChildIDs[ourIdx+1]).(*InternalNode).ChildIDs) >
+		int(internalOrder + 1)/2 {
 		// Steal from right sibling
-		rightSibling := n.Parent.Children[ourIdx+1].(*InternalNode)
-		n.Keys = append(n.Keys, n.Parent.Keys[ourIdx])
-		n.Parent.Keys[ourIdx] = rightSibling.Keys[0]
+		rightSibling := c.Get(parent.ChildIDs[ourIdx+1]).(*InternalNode)
+		n.Keys = append(n.Keys, parent.Keys[ourIdx])
+		parent.Keys[ourIdx] = rightSibling.Keys[0]
 		rightSibling.Keys = rightSibling.Keys[1:]
-		rightSibling.Children = rightSibling.Children[1:]
-		n.Children[len(n.Children)-1].SetParent(n)
+		rightSibling.ChildIDs = rightSibling.ChildIDs[1:]
+		c.Get(n.ChildIDs[len(n.ChildIDs)-1]).SetParentID(n.ID)
 
 		return nil
 	}
 
 	if ourIdx > 0 {
 		// Merge with left sibling
-		leftSibling := n.Parent.Children[ourIdx-1].(*InternalNode)
-		leftSibling.Keys = append(leftSibling.Keys, n.Parent.Keys[ourIdx-1])
+		leftSibling := c.Get(parent.ChildIDs[ourIdx-1]).(*InternalNode)
+		leftSibling.Keys = append(leftSibling.Keys, parent.Keys[ourIdx-1])
 		leftSibling.Keys = append(leftSibling.Keys, n.Keys...)
-		leftSibling.Children = append(leftSibling.Children, n.Children...)
-		for _, child := range n.Children {
-			child.SetParent(leftSibling)
+		leftSibling.ChildIDs = append(leftSibling.ChildIDs, n.ChildIDs...)
+		for _, childID := range n.ChildIDs {
+			c.Get(childID).SetParentID(leftSibling.ID)
 		}
-		n.Parent.Keys = utils.Delete(n.Parent.Keys, ourIdx-1)
-		n.Parent.Children = utils.Delete(n.Parent.Children, ourIdx)
+		parent.Keys = utils.Delete(parent.Keys, ourIdx-1)
+		parent.ChildIDs = utils.Delete(parent.ChildIDs, ourIdx)
 
-		return n.Parent.merge()
+		return parent.merge(c)
 	} else {
 		// Merge with right sibling
-		rightSibling := n.Parent.Children[ourIdx+1].(*InternalNode)
-		n.Keys = append(n.Keys, n.Parent.Keys[ourIdx])
+		rightSibling := c.Get(parent.ChildIDs[ourIdx+1]).(*InternalNode)
+		n.Keys = append(n.Keys, parent.Keys[ourIdx])
 		n.Keys = append(n.Keys, rightSibling.Keys...)
-		n.Children = append(n.Children, rightSibling.Children...)
-		for _, child := range rightSibling.Children {
-			child.SetParent(n)
+		n.ChildIDs = append(n.ChildIDs, rightSibling.ChildIDs...)
+		for _, childID := range rightSibling.ChildIDs {
+			c.Get(childID).SetParentID(n.ID)
 		}
-		n.Parent.Keys = utils.Delete(n.Parent.Keys, ourIdx)
-		n.Parent.Children = utils.Delete(n.Parent.Children, ourIdx+1)
+		parent.Keys = utils.Delete(parent.Keys, ourIdx)
+		parent.ChildIDs = utils.Delete(parent.ChildIDs, ourIdx+1)
 
-		return n.Parent.merge()
+		return parent.merge(c)
 	}
 }
 
-func (n *InternalNode) GetNewRoot() BTreeNode {
+func (n *InternalNode) GetNewRootID() uint64 {
 	if len(n.Keys) == 0 {
-		return n.Children[0]
+		return n.ChildIDs[0]
 	}
-	return n
+	return n.ID
 }
 
-func (n *InternalNode) Print(level int) {
+func (n *InternalNode) Print(c NodeCache, level int) {
 	indent := strings.Repeat("    ", level)
 	fmt.Printf("%sInternal Node: keys=%v\n", indent, n.Keys)
-	for _, child := range n.Children {
-		child.Print(level + 1)
+	for _, childID := range n.ChildIDs {
+		c.Get(childID).Print(c, level + 1)
 	}
 }
 
-func (n *InternalNode) Verify() (uint64, uint64) {
-	for i := range n.Keys {
-		_, wasFound := n.Children[i+1].Get(n.Keys[i])
-		if !wasFound {
-			panic(fmt.Sprintf("key %v not found in node %v\n", n.Keys[i], n))
-		}
-	}
-	a, _ := n.Children[0].Verify()
-	_, b := n.Children[len(n.Children)-1].Verify()
-	for i := 0; i < len(n.Keys); i++ {
-		x, _ := n.Children[i].Verify()
-		if x >= n.Keys[i] {
-			panic("uh oh\n")
-		}
-		y, _ := n.Children[i+1].Verify()
-		if y != n.Keys[i] {
-			panic("uh oh\n")
-		}
-	}
-	for _, child := range n.Children {
-		child.Verify()
-	}
-	return a, b
-}

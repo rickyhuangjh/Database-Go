@@ -9,8 +9,8 @@ import (
 const dataFilePath = "data.bin"
 
 type NodeStorageManager interface {
-	Read(pageIdx int) (node.BTreeNodeSerialized, error)
-	Write(pageIdx int, data node.BTreeNodeSerialized) error
+	Read(pageIdx int) (node.BTreeNode, error)
+	Write(pageIdx int, data node.BTreeNode) error
 }
 
 type NodeStorageManagerImpl struct {

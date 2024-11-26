@@ -20,6 +20,4 @@ const leafHeaderSize = IDSize + parentIDSize + prevIDSize + nextIDSize + numKeyS
 
 
 // optimal orders
-const InternalOrder = (PageSize - internalHeaderSize) / (keySize + childIDSize)
-const LeafOrder = (PageSize - leafHeaderSize) / (keySize + valSize)
 

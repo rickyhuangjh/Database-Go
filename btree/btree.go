@@ -7,88 +7,98 @@ import (
 
 
 type BTree interface {
-	Set(key uint64, val node.V) error
+	Set(key uint64, val uint64) error
 	Delete(key uint64) error
-	Get(key uint64) (node.V, bool)
-	GetRange(start, end uint64) []node.V
-	Traverse() []node.V
+	Get(key uint64) (uint64, bool)
+	GetRange(start, end uint64) []uint64
+	Traverse() []uint64
 	Print()
-	Verify()
 }
 
 type btree struct {
-	Order uint64
-	Root  node.BTreeNode
+	Cache node.NodeCache
+	RootID uint64
 	Size  int
 }
 
 
-func NewBTree() BTree {
+func NewBTree(cache node.NodeCache) BTree {
 	return &btree{
-		Root:  nil,
+		Cache: cache,
+		RootID:  0,
 		Size:  0,
 	}
 }
 
-func (b *btree) Get(key uint64) (node.V, bool) {
-	return b.Root.Get(key)
+func (b *btree) Get(key uint64) (uint64, bool) {
+	if b.RootID == 0 {
+		return 0, false
+	}
+	return b.Cache.Get(b.RootID).Get(b.Cache, key)
 }
 
-func (b *btree) Traverse() []node.V {
-	if b.Root == nil {
+func (b *btree) Traverse() []uint64 {
+	if b.RootID == 0 {
 		return nil
 	}
-	res := b.Root.Traverse(make([]node.V, 0, b.Size))
+	res := b.Cache.Get(b.RootID).Traverse(b.Cache, make([]uint64, 0, b.Size))
 	return res
 }
 
-func (b *btree) Set(key uint64, val node.V) error {
-	if b.Root == nil {
-		b.Root = node.NewLeafNode()
+func (b *btree) Set(key uint64, val uint64) error {
+	var root node.BTreeNode
+	if b.RootID == 0 {
+		root = node.NewLeafNode()
+		b.Cache.Register(root)
+		b.RootID = root.(*node.LeafNode).ID
+	} else {
+		root = b.Cache.Get(b.RootID)
 	}
 
-	wasAdded, err := b.Root.Set(key, val)
-	if b.Root.GetParent() != nil {
-		b.Root = b.Root.GetParent()
+	added, err := root.Set(b.Cache, key, val)
+	if root.GetParentID() != 0 {
+		b.RootID = root.GetParentID()
 	}
-	if wasAdded {
+	if added {
 		b.Size++
 	}
 	return err
 }
 
 func (b *btree) Delete(key uint64) error {
-	if b.Root == nil {
+	if b.RootID == 0 {
 		return nil
 	}
-	wasDeleted, err := b.Root.Delete(key)
-	if wasDeleted {
+	root := b.Cache.Get(b.RootID)
+	deleted, err := root.Delete(b.Cache, key)
+	if deleted {
 		b.Size--
 	}
-	b.Root = b.Root.GetNewRoot()
-	if b.Root != nil {
-		b.Root.SetParent(nil)
+	b.RootID = root.GetNewRootID()
+	if b.RootID != 0 {
+		b.Cache.Get(b.RootID).SetParentID(0)
 	}
 	return err
 }
 
 func (b *btree) Print() {
-	if b.Root == nil {
+	if b.RootID == 0 {
 		fmt.Println("Empty tree")
 		return
 	}
-	b.Root.Print(0)
+	b.Cache.Get(b.RootID).Print(b.Cache, 0)
 }
 
-func (b *btree) Verify() {
-	if b.Root == nil {
-		return
+
+func (b *btree) GetRange(start, end uint64) []uint64 {
+	if b.RootID == 0 {
+		return nil
 	}
-	b.Root.Verify()
-}
-
-func (b *btree) GetRange(start, end uint64) []node.V {
-	res := make([]node.V, 0)
-	res = b.Root.GetRange(start, end, res)
+	res := make([]uint64, 0)
+	res = b.Cache.Get(b.RootID).GetRange(b.Cache, start, end, res)
 	return res
 }
+
+
+
+

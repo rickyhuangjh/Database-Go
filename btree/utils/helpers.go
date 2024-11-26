@@ -1,9 +1,12 @@
 package utils
 
+import (
+	"fmt"
+)
 
 func Insert[T any](slice []T, idx int, val T) []T {
 	if idx < 0 || idx > len(slice) {
-		panic("Slice insert idx out of bounds")
+		panic(fmt.Sprintf("Slice insert idx %v out of bounds len %v", idx, len(slice)))
 	}
 	if idx == cap(slice) {
 		panic("Slice over capacity")
