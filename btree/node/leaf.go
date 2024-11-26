@@ -9,23 +9,15 @@ import (
 
 func NewLeafNode() *LeafNode {
 	return &LeafNode{
-		Order:    utils.OptimalLeafOrder,
-		Keys:     make([]uint64, 0, utils.OptimalLeafOrder),
-		Vals:     make([]V, 0, utils.OptimalLeafOrder),
-		Parent:   nil,
-		Next:     nil,
-		Prev:     nil,
+		ID: 0,
+		Keys:     make([]uint64, 0, utils.OptimalLeafOrder + 1),
+		Vals:     make([]uint64, 0, utils.OptimalLeafOrder + 1),
+		ParentID:   nil,
+		NextID:     nil,
+		PrevID:     nil,
 	}
 }
 
-func (n *LeafNode) GetParent() *InternalNode {
-	return n.Parent
-}
-
-func (n *LeafNode) SetParent(parent *InternalNode) error {
-	n.Parent = parent
-	return nil
-}
 
 // returns the index of where the KVP would go
 func (n *LeafNode) find(key uint64) (int, bool) {
@@ -39,45 +31,44 @@ func (n *LeafNode) find(key uint64) (int, bool) {
 	return len(n.Keys), false
 }
 
-func (n *LeafNode) Get(key uint64) (V, bool) {
-	idx, wasFound := n.find(key)
-	if wasFound {
-		return n.Vals[idx], true
+func (n *LeafNode) Get(cache NodeCache, key uint64) (uint64, bool) {
+	valIdx, found := n.find(key)
+	if found {
+		return n.Vals[valIdx], true
 	}
-	var zero V
-	return zero, false
+	return 0, false
 }
 
-func (n *LeafNode) GetRange(start, end uint64, res []V) []V {
+func (n *LeafNode) GetRange(cache NodeCache, start, end uint64, res []uint64) []uint64 {
 	startIdx, _ := n.find(start)
 	endIdx, _ := n.find(end)
 	res = append(res, n.Vals[startIdx:endIdx]...)
-	if n.Next != nil && endIdx == len(n.Keys) {
-		return n.Next.GetRange(start, end, res)
+	if n.NextID > 0 && endIdx == len(n.Keys) {
+		return cache.Get(n.NextID).GetRange(cache, start, end, res)
 	}
 	return res
 }
 
-func (n *LeafNode) Traverse(res []V) []V {
+func (n *LeafNode) Traverse(cache NodeCache, res []uint64) []uint64 {
 	res = append(res, n.Vals...)
-	if n.Next == nil {
+	if n.NextID == 0 {
 		return res
 	}
-	return n.Next.Traverse(res)
+	return cache.Get(n.NextID).Traverse(res)
 }
 
-func (n *LeafNode) Set(key uint64, val V) (bool, error) {
-	idx, wasFound := n.find(key)
-	if wasFound {
+func (n *LeafNode) Set(c NodeCache, key uint64, val uint64) (bool, error) {
+	idx, found := n.find(key)
+	if found {
 		n.Vals[idx] = val
 	} else {
 		n.Keys = utils.Insert(n.Keys, idx, key)
 		n.Vals = utils.Insert(n.Vals, idx, val)
 	}
-	return !wasFound, n.split()
+	return !found, n.split(c)
 }
 
-func (n *LeafNode) Delete(key uint64) (bool, error) {
+func (n *LeafNode) Delete(c NodeCache, key uint64) (bool, error) {
 	idx, wasFound := n.find(key)
 	if !wasFound {
 		return false, nil
@@ -87,18 +78,19 @@ func (n *LeafNode) Delete(key uint64) (bool, error) {
 	n.Vals = utils.Delete(n.Vals, idx)
 	
 	err := n.merge()
-	if n.Parent != nil && len(n.Keys) > 0 {
-		n.Parent.replaceKey(old, n.Keys[0])
+	parentNode := c.Get(n.ParentID).(*InternalNode)
+	if parentNode != nil && len(n.Keys) > 0 {
+		parentNode.replaceKey(old, n.Keys[0])
 	}
 	return true, err
 }
 
 
-func (n *LeafNode) GetNewRoot() BTreeNode {
+func (n *LeafNode) GetNewRootID() uint64 {
 	if len(n.Keys) == 0 {
-		return nil
+		return 0
 	}
-	return n
+	return n.ID
 }
 
 func (n *LeafNode) Print(level int) {
@@ -110,82 +102,99 @@ func (n *LeafNode) Verify() (uint64, uint64) {
 	return n.Keys[0], n.Keys[len(n.Keys)-1]
 }
 
-func (n *LeafNode) split() error {
-	if len(n.Keys) < int(n.Order) {
+func (n *LeafNode) split(c NodeCache) error {
+	if len(n.Vals) <= utils.LeafOrder {
 		return nil
 	}
 
 	siblingNode := NewLeafNode()
-	if n.Parent == nil {
-		n.Parent = NewInternalNode()
-		n.Parent.insertChild(0, n)
+	siblingID, err := c.Register(siblingNode)
+	if err != nil {
+		return err
 	}
-	siblingNode.Parent = n.Parent
+
+	if n.ParentID == 0 {
+		parentID, err := c.Register(NewInternalNode())
+		if err != nil {
+			return err
+		}
+		n.ParentID = parentID
+		c.Get(n.ParentID).insertChild(0, n)
+	}
+	parentNode := c.Get(n.ParentID).(*InternalNode)
+	siblingNode.ParentID = n.ParentID
 
 	mid := len(n.Keys) / 2
 
-	idx, _ := n.Parent.find(n.Keys[mid])
-	n.Parent.Keys = utils.Insert(n.Parent.Keys, idx, n.Keys[mid])
-	n.Parent.insertChild(idx+1, siblingNode)
+	idx, _ := parentNode.find(n.Keys[mid])
+	parentNode.Keys = utils.Insert(parentNode.Keys, idx, n.Keys[mid])
+	parentNode.ChildIDs = utils.Insert(parentNode.ChildIDs, idx+1, siblingID)
 
-	siblingNode.Keys = make([]uint64, len(n.Keys[mid:]), n.Order)
+	siblingNode.Keys = make([]uint64, len(n.Keys[mid:]), utils.LeafOrder)
 	copy(siblingNode.Keys, n.Keys[mid:])
 	n.Keys = n.Keys[:mid]
 
-	siblingNode.Vals = make([]V, len(n.Vals[mid:]), n.Order)
+	siblingNode.Vals = make([]uint64, len(n.Vals[mid:]), utils.LeafOrder)
 	copy(siblingNode.Vals, n.Vals[mid:])
 	n.Vals = n.Vals[:mid]
 
-	siblingNode.Next = n.Next
-	if n.Next != nil {
-		n.Next.Prev = siblingNode
+	siblingNode.NextID = n.NextID
+
+	if n.NextID != 0 {
+		nextNode := c.Get(n.NextID).(*LeafNode)
+		c.Get(nextNode.ID).(*LeafNode).PrevID = siblingNode.ID
 	}
-	n.Next = siblingNode
-	siblingNode.Prev = n
-	return n.Parent.split()
+	n.NextID = siblingNode.ID
+	siblingNode.PrevID = n.ID
+	return parentNode.split()
 }
 
-func (n *LeafNode) merge() error {
-	if n.Parent == nil || len(n.Keys) >= int(n.Order-1)/2 {
+func (n *LeafNode) merge(c NodeCache) error {
+	if n.ParentID == 0 || len(n.Vals) >= int(utils.LeafOrder)/2 {
 		return nil
 	}
-	if n.Next != nil && n.Next.Parent == n.Parent &&
-		len(n.Next.Keys) > int(n.Order-1)/2 {
+	parentNode := c.Get(n.ParentID).(*InternalNode)
+	nextNode := c.Get(n.NextID).(*LeafNode)
+	prevNode := c.Get(n.PrevID).(*LeafNode)
+	if nextNode != nil && (c.Get(nextNode.ParentID) == parentNode) &&
+		len(nextNode.Keys) > int(utils.LeafOrder+1)/2 {
 		// steal from next
-		n.Parent.replaceKey(n.Next.Keys[0], n.Next.Keys[1])
-		n.Keys = append(n.Keys, n.Next.Keys[0])
-		n.Vals = append(n.Vals, n.Next.Vals[0])
-		n.Next.Keys = n.Next.Keys[1:]
-		n.Next.Vals = n.Next.Vals[1:]
-	} else if n.Prev != nil && n.Prev.Parent == n.Parent &&
-		len(n.Prev.Keys) > int(n.Order-1)/2 {
+		parentNode.replaceKey(nextNode.Keys[0], nextNode.Keys[1])
+		n.Keys = append(n.Keys, nextNode.Keys[0])
+		n.Vals = append(n.Vals, nextNode.Vals[0])
+		nextNode.Keys = nextNode.Keys[1:]
+		nextNode.Vals = nextNode.Vals[1:]
+	} else if prevNode != nil && prevNode.Parent == n.Parent &&
+		len(prevNode.Keys) > int(utils.LeafOrder+1)/2 {
 		// steal from prev
-		n.Keys = utils.Insert(n.Keys, 0, n.Prev.Keys[len(n.Prev.Keys)-1])
-		n.Vals = utils.Insert(n.Vals, 0, n.Prev.Vals[len(n.Prev.Vals)-1])
-		n.Prev.Keys = n.Prev.Keys[:len(n.Prev.Keys)-1]
-		n.Prev.Vals = n.Prev.Vals[:len(n.Prev.Vals)-1]
-	} else if n.Prev != nil && n.Prev.Parent == n.Parent {
+		n.Keys = utils.Insert(n.Keys, 0, prevNode.Keys[len(prevNode.Keys)-1])
+		n.Vals = utils.Insert(n.Vals, 0, prevNode.Vals[len(prevNode.Vals)-1])
+		prevNode.Keys = prevNode.Keys[:len(prevNode.Keys)-1]
+		prevNode.Vals = prevNode.Vals[:len(prevNode.Vals)-1]
+	} else if prevNode != nil && prevNode.Parent == parentNode {
 		// merge with prev
-		n.Prev.Keys = append(n.Prev.Keys, n.Keys...)
-		n.Prev.Vals = append(n.Prev.Vals, n.Vals...)
-		ourIdx, _ := n.Parent.findChildIdx(n)
-		n.Parent.Keys = utils.Delete(n.Parent.Keys, ourIdx-1)
-		n.Parent.Children = utils.Delete(n.Parent.Children, ourIdx)
-		n.Prev.Next = n.Next
-		if n.Next != nil {
-			n.Next.Prev = n.Prev
+		prevNode.Keys = append(prevNode.Keys, n.Keys...)
+		prevNode.Vals = append(prevNode.Vals, n.Vals...)
+		ourIdx, _ := parentNode.findChildIdx(n.ID)
+		parentNode.Keys = utils.Delete(parentNode.Keys, ourIdx-1)
+		parentNode.ChildIDs = utils.Delete(parentNode.ChildIDs, ourIdx)
+		prevNode.NextID = n.NextID
+		if nextNode != nil {
+			nextNode.PrevID = n.PrevID
 		}
 	} else {
 		// merge with next
-		n.Keys = append(n.Keys, n.Next.Keys...)
-		n.Vals = append(n.Vals, n.Next.Vals...)
-		ourIdx, _ := n.Parent.findChildIdx(n)
-		n.Parent.Keys = utils.Delete(n.Parent.Keys, ourIdx)
-		n.Parent.Children = utils.Delete(n.Parent.Children, ourIdx+1)
-		if n.Next.Next != nil {
-			n.Next.Next.Prev = n
+		n.Keys = append(n.Keys, nextNode.Keys...)
+		n.Vals = append(n.Vals, nextNode.Vals...)
+		ourIdx, _ := parentNode.findChildIdx(n.ID)
+		parentNode.Keys = utils.Delete(parentNode.Keys, ourIdx)
+		parentNode.ChildIDs = utils.Delete(parentNode.ChildIDs, ourIdx+1)
+		
+		nextNextNode := c.Get(nextNode.NextID).(*LeafNode)
+		if nextNextNode != nil {
+			nextNextNode.PrevID = n.ID
 		}
-		n.Next = n.Next.Next
+		n.NextID = nextNextNode.ID
 	}
-	return n.Parent.merge()
+	return parentNode.merge()
 }

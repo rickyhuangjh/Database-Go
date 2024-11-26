@@ -43,20 +43,6 @@ func (s *NodeStorageManagerImpl) Write(pageIdx int, data []byte) error {
 	return err
 }
 
-type NodeCache struct {
-	Nodes map[uint64]node.BTreeNode
-}
 
-func (c *NodeCache) Get(id uint64) (node.BTreeNode, bool) {
-	if n, ok := c.Nodes[id]; ok {
-		return n, true
-	}
 
-	// TODO: read from disk
-
-	// TODO: deserialize
-	return nil, false
-}
-
-func (c *NodeCache) Update()
 

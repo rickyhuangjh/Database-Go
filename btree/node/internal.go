@@ -8,26 +8,13 @@ import (
 
 func NewInternalNode() *InternalNode {
 	return &InternalNode{
-		Order:    utils.OptimalInternalOrder,
-		Keys:     make([]uint64, 0, utils.OptimalInternalOrder),
-		Children: make([]BTreeNode, 0, utils.OptimalInternalOrder + 1),
-		Parent:   nil,
+		ParentID:   0,
+		Keys:     make([]uint64, 0, utils.InternalOrder),
+		ChildIDs: make([]uint64, 0, utils.InternalOrder + 1),
 	}
 }
 
-func (n *InternalNode) insertChild(idx int, child BTreeNode) error {
-	n.Children = utils.Insert(n.Children, idx, child)
-	return nil
-}
 
-func (n *InternalNode) GetParent() *InternalNode {
-	return n.Parent
-}
-
-func (n *InternalNode) SetParent(parent *InternalNode) error {
-	n.Parent = parent
-	return nil
-}
 
 func (n *InternalNode) find(key uint64) (int, bool) {
 	for i, curKey := range n.Keys {
@@ -38,45 +25,50 @@ func (n *InternalNode) find(key uint64) (int, bool) {
 	return len(n.Keys), false
 }
 
-func (n *InternalNode) findChildIdx(child BTreeNode) (int, bool) {
-	for i, curChild := range n.Children {
-		if curChild == child {
+func (n *InternalNode) findChildIdx(childID uint64) (int, bool) {
+	for i, curChildID := range n.ChildIDs {
+		if curChildID == childID {
 			return i, true
 		}
 	}
 	return -1, false
 }
 
-func (n *InternalNode) Get(key uint64) (V, bool) {
+func (n *InternalNode) Get(c NodeCache, key uint64) (uint64, bool) {
 	idx, _ := n.find(key)
-	return n.Children[idx].Get(key)
+	return c.Get(n.ChildIDs[idx]).Get(c, key)
 }
 
-func (n *InternalNode) GetRange(start, end uint64, res []V) []V {
+func (n *InternalNode) GetRange(c NodeCache,
+	start, end uint64, res []uint64) []uint64 {
 	idx, _ := n.find(start)
-	return n.Children[idx].GetRange(start, end, res)
+	return c.Get(n.ChildIDs[idx]).GetRange(c, start, end, res)
 }
 
-func (n *InternalNode) Traverse(res []V) []V {
-	return n.Children[0].Traverse(res)
+func (n *InternalNode) Traverse(c NodeCache, res []uint64) []uint64 {
+	return c.Get(n.ChildIDs[0]).Traverse(c, res)
 }
 
-func (n *InternalNode) Set(key uint64, val V) (bool, error) {
+func (n *InternalNode) Set(c NodeCache, key uint64, val uint64) (bool, error) {
 	idx, _ := n.find(key)
-	return n.Children[idx].Set(key, val)
+	return c.Get(n.ChildIDs[idx]).Set(c, key, val)
 }
 
-func (n *InternalNode) Delete(key uint64) (bool, error) {
+func (n *InternalNode) Delete(c NodeCache, key uint64) (bool, error) {
 	idx, _ := n.find(key)
-	return n.Children[idx].Delete(key)
+	return c.Get(n.ChildIDs[idx]).Delete(c, key)
 }
 
-func (n *InternalNode) replaceKey(oldKey uint64, newKey uint64) {
+func (n *InternalNode) replaceKey(c NodeCache, oldKey uint64, newKey uint64) {
 	if oldKey == newKey {
 		return
-	} else if len(n.Keys) == 0 || oldKey < n.Keys[0] {
-		if n.Parent != nil {
-			n.Parent.replaceKey(oldKey, newKey)
+	}
+
+
+	if len(n.Keys) == 0 || oldKey < n.Keys[0] {
+		parentNode := c.Get(n.ParentID)
+		if parentNode != nil {
+			parentNode.(*InternalNode).replaceKey(c, oldKey, newKey)
 		}
 		return
 	}
@@ -88,15 +80,21 @@ func (n *InternalNode) replaceKey(oldKey uint64, newKey uint64) {
 	}
 }
 
-func (n *InternalNode) split() error {
-	if len(n.Keys) < int(n.Order) {
+func (n *InternalNode) split(c NodeCache) error {
+	if len(n.ChildIDs) <= utils.InternalOrder {
 		return nil
 	}
 
+
+	parentNode := c.Get(n.ParentID)
+	
+
 	siblingNode := NewInternalNode()
-	if n.Parent == nil {
-		n.Parent = NewInternalNode()
-		n.Parent.insertChild(0, n)
+	c.Register(siblingNode)
+	if n.ParentID == 0 {
+		parentNode := newInternalNode()
+		c.Register(parentNode)
+		parentNode.ChildIDs = insert(parentNode.ChildIDs, 0, n.ID)
 	}
 	siblingNode.Parent = n.Parent
 
@@ -121,7 +119,7 @@ func (n *InternalNode) split() error {
 	return n.Parent.split()
 }
 
-func (n *InternalNode) merge() error {
+func (n *InternalNode) merge(c nodeCache) error {
 	if n.Parent == nil || len(n.Children) >= int(n.Order + 1)/2 {
 		return nil
 	}
