@@ -1,25 +1,34 @@
 package node
 
+import (
+	"btree/io"
+)
 
 type NodeCache interface {
 	Get(id uint64) BTreeNode
 	Register(n BTreeNode) error
 }
 
-type NodeCacheImpl struct {
-	Nodes map[uint64]BTreeNode
+type nodeCache struct {
+	manager io.StorageManager
+	nodes map[uint64]BTreeNode
 	size uint64
 }
 
-func NewNodeCacheImpl() *NodeCacheImpl {
-	return &NodeCacheImpl{
-		Nodes: make(map[uint64]BTreeNode),
+func NewNodeCache(manager io.StorageManager) NodeCache {
+	return &nodeCache{
+		manager: manager,
+		nodes: make(map[uint64]BTreeNode),
 		size: 0,
 	}
 }
 
-func (c *NodeCacheImpl) Get(id uint64) BTreeNode {
-	if n, ok := c.Nodes[id]; ok {
+
+
+func (c *nodeCache) Get(id uint64) BTreeNode {
+	if id == 0 {
+		return nil
+	} else if n, ok := c.nodes[id]; ok {
 		return n
 	}
 
@@ -29,9 +38,9 @@ func (c *NodeCacheImpl) Get(id uint64) BTreeNode {
 	return nil
 }
 
-func (c *NodeCacheImpl) Register(n BTreeNode) error {
+func (c *nodeCache) Register(n BTreeNode) error {
 	c.size++
-	c.Nodes[c.size] = n
+	c.nodes[c.size] = n
 	n.SetID(c.size)
 	return nil
 }

@@ -1,6 +1,8 @@
 package node
 
 import (
+	"bytes"
+	"encoding/binary"
 	"btree/utils"
 	"fmt"
 	"strings"
@@ -12,6 +14,38 @@ func NewInternalNode() *InternalNode {
 		Keys:     make([]uint64, 0, internalOrder),
 		ChildIDs: make([]uint64, 0, internalOrder + 1),
 	}
+}
+
+func (n *InternalNode) Serialize() []byte {
+	buf := new(bytes.Buffer)
+
+	err := binary.Write(buf, binary.LittleEndian, n.ID)
+	if err != nil {
+		panic("Could not serialize Internal ID")
+	}
+	err = binary.Write(buf, binary.LittleEndian, n.ParentID)
+	if err != nil {
+		panic("Could not serialize Internal ParentID")
+	}
+	err = binary.Write(buf, binary.LittleEndian, len(n.ChildIDs))
+	if err != nil {
+		panic("Could not serialize Internal length")
+	}
+	for i, childID := range(n.ChildIDs) {
+		var key uint64
+		if i < len(n.Keys) {
+			key = n.Keys[i]
+		}
+		err = binary.Write(buf, binary.LittleEndian, key)
+		if err != nil {
+			panic("Could not serialize Internal key")
+		}
+		err = binary.Write(buf, binary.LittleEndian, childID)
+		if err != nil {
+			panic("Could not serialize Internal childID")
+		}
+	}
+	return buf.Bytes()
 }
 
 func (n *InternalNode) GetID() uint64 {
