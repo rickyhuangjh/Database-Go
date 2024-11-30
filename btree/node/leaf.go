@@ -71,7 +71,7 @@ func (n *LeafNode) GetRange(cache NodeCache, start, end uint64, res []uint64) []
 
 func (n *LeafNode) Traverse(c NodeCache, res []uint64) []uint64 {
 	res = append(res, n.Vals...)
-	if n.NextID == 0 {
+	if !c.IsValid(n.NextID) {
 		return res
 	}
 	return c.Get(n.NextID).Traverse(c, res)
@@ -118,7 +118,9 @@ func (n *LeafNode) split(c NodeCache) error {
 	}
 
 	var parent *InternalNode
-	if n.ParentID == 0 {
+	if c.IsValid(n.ParentID) {
+		parent = c.Get(n.ParentID).(*InternalNode)
+	} else {
 		parent = NewInternalNode()
 		err := c.Register(parent)
 		if err != nil {
@@ -126,8 +128,6 @@ func (n *LeafNode) split(c NodeCache) error {
 		}
 		n.ParentID = parent.ID
 		parent.ChildIDs = utils.Insert(parent.ChildIDs, 0, n.ID)
-	} else {
-		parent = c.Get(n.ParentID).(*InternalNode)
 	}
 	sibling.ParentID = n.ParentID
 
@@ -159,7 +159,7 @@ func (n *LeafNode) split(c NodeCache) error {
 }
 
 func (n *LeafNode) merge(c NodeCache) error {
-	if n.ParentID == 0 || len(n.Vals) >= int(leafOrder)/2 {
+	if !c.IsValid(n.ParentID) || len(n.Vals) >= int(leafOrder)/2 {
 		return nil
 	}
 	parent := c.Get(n.ParentID).(*InternalNode)

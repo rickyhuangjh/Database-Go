@@ -1,8 +1,6 @@
 package node
 
 import (
-	"bytes"
-	"encoding/binary"
 	"btree/utils"
 	"fmt"
 	"strings"
@@ -16,37 +14,6 @@ func NewInternalNode() *InternalNode {
 	}
 }
 
-func (n *InternalNode) Serialize() []byte {
-	buf := new(bytes.Buffer)
-
-	err := binary.Write(buf, binary.LittleEndian, n.ID)
-	if err != nil {
-		panic("Could not serialize Internal ID")
-	}
-	err = binary.Write(buf, binary.LittleEndian, n.ParentID)
-	if err != nil {
-		panic("Could not serialize Internal ParentID")
-	}
-	err = binary.Write(buf, binary.LittleEndian, len(n.ChildIDs))
-	if err != nil {
-		panic("Could not serialize Internal length")
-	}
-	for i, childID := range(n.ChildIDs) {
-		var key uint64
-		if i < len(n.Keys) {
-			key = n.Keys[i]
-		}
-		err = binary.Write(buf, binary.LittleEndian, key)
-		if err != nil {
-			panic("Could not serialize Internal key")
-		}
-		err = binary.Write(buf, binary.LittleEndian, childID)
-		if err != nil {
-			panic("Could not serialize Internal childID")
-		}
-	}
-	return buf.Bytes()
-}
 
 func (n *InternalNode) GetID() uint64 {
 	return n.ID
@@ -143,7 +110,9 @@ func (n *InternalNode) split(c NodeCache) error {
 	c.Register(sibling)
 
 	var parent *InternalNode
-	if n.ParentID == 0 {
+	if c.IsValid(n.ParentID) {
+		parent = c.Get(n.ParentID).(*InternalNode)
+	} else {
 		parent = NewInternalNode()
 		err := c.Register(parent)
 		if err != nil {
@@ -151,9 +120,8 @@ func (n *InternalNode) split(c NodeCache) error {
 		}
 		n.ParentID = parent.ID
 		parent.ChildIDs = utils.Insert(parent.ChildIDs, 0, n.ID)
-	} else {
-		parent = c.Get(n.ParentID).(*InternalNode)
 	}
+
 	sibling.ParentID= n.ParentID
 
 	mid := len(n.Keys) / 2
@@ -179,11 +147,11 @@ func (n *InternalNode) split(c NodeCache) error {
 
 func (n *InternalNode) merge(c NodeCache) error {
 
-	parent := c.Get(n.ParentID).(*InternalNode)
-	if parent == nil || len(n.ChildIDs) >= (internalOrder + 1)/2 {
+	if c.IsValid(n.ParentID) || len(n.ChildIDs) >= (internalOrder + 1)/2 {
 		return nil
 	}
 
+	parent := c.Get(n.ParentID).(*InternalNode)
 	ourIdx, _ := parent.findChildIdx(n.ID)
 
 	// Try to steal from siblings first

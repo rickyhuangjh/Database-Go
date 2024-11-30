@@ -25,7 +25,7 @@ type InternalNode struct {
 }
 
 type LeafNode struct {
-	ID uint64
+	ID uint64 // Left-most bit is 1
 	ParentID uint64
 	NextID uint64
 	PrevID   uint64
@@ -41,7 +41,7 @@ const childIDSize = 8
 const valSize = 8
 
 
-const internalOrder = (4096 - internalHeaderSize) / (keySize + childIDSize) / 3
-const leafOrder = (4096 - leafHeaderSize) / (keySize + valSize) / 3
+const internalOrder = (4096 - internalHeaderSize) / (keySize + childIDSize)
+const leafOrder = (4096 - leafHeaderSize) / (keySize + valSize)
 
 
